@@ -1,0 +1,5 @@
+# Local secrets — commit .env.example instead.
+.env
+
+# OS / editor noise
+.DS_Store
