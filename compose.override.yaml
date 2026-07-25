@@ -1,0 +1,32 @@
+services:
+  php:
+    user: "${UID:-1000}:${GID:-1000}"
+    # Separate tag so the dev image doesn't clobber the prod one in the local cache.
+    image: ${IMAGES_PREFIX:-}movieshelf-php-dev
+    build:
+      target: frankenphp_dev
+    volumes:
+      # Only api/ is the Symfony app — web/, analytics/ and db/ must stay out of /app.
+      - ./api:/app
+      - ./api/frankenphp/Caddyfile:/etc/frankenphp/Caddyfile:ro
+      - ./api/frankenphp/conf.d/20-app.dev.ini:/usr/local/etc/php/app.conf.d/20-app.dev.ini:ro
+      # Keep var/ off the bind-mount for faster I/O on Mac/Windows; uncomment there.
+      # On Linux/WSL2 (native ext4) it buys nothing and the anonymous volume is
+      # root-owned, which breaks the non-root `user:` above.
+      #- /app/var
+      # If you develop on Mac or Windows you can remove the vendor/ directory
+      #  from the bind-mount for better performance by enabling the next line:
+      #- /app/vendor
+    environment:
+      FRANKENPHP_WORKER_CONFIG: watch
+      FRANKENPHP_SITE_CONFIG: hot_reload
+      MERCURE_EXTRA_DIRECTIVES: demo
+      # See https://xdebug.org/docs/all_settings#mode
+      XDEBUG_MODE: "${XDEBUG_MODE:-develop}"
+      APP_ENV: "${APP_ENV:-dev}"
+    extra_hosts:
+      # Ensure that host.docker.internal is correctly defined on Linux
+      - host.docker.internal:host-gateway
+    tty: true
+###> symfony/mercure-bundle ###
+###< symfony/mercure-bundle ###

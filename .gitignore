@@ -1,5 +1,8 @@
 # Local secrets — commit .env.example instead.
-.env
+# Leading slash matters: unanchored ".env" also swallowed api/.env, which Symfony
+# expects in version control (it holds non-secret defaults; secrets go in .env.local).
+/.env
+/.env.local
 
 # OS / editor noise
 .DS_Store
