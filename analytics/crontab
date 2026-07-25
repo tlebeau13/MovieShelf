@@ -1,0 +1,10 @@
+# supercronic crontab — one line per scheduled job.
+#
+# Times are UTC (the container has no TZ set). supercronic logs each run to
+# stdout, so `docker compose logs analytics` is the whole story.
+#
+# The real analytics cadences arrive with issues #12-#14. 15 minutes is a
+# scaffold value: frequent enough to see it working, harmless because the job
+# takes an advisory lock and skips if a previous run is still going.
+
+*/15 * * * * hello

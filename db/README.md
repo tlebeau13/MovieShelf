@@ -16,6 +16,11 @@ write-boundary is enforced by ownership + grants rather than convention.
 | `canonical` | `canonical.book`, `canonical.film`, `canonical.adaptation` | `symfony`    | `analytics` (RO) |
 | `mart`      | `mart.bestseller_longevity`, `mart.genre_trend`, …       | `analytics`    | `symfony` (RO)   |
 
+A fourth schema, `migrations`, holds Doctrine's `doctrine_migration_versions`
+bookkeeping table. It is tooling state, not data: unqualified it would follow the
+`symfony` role's `search_path` straight into `canonical`, and `public` is revoked
+on purpose. See `api/config/packages/doctrine_migrations.yaml`.
+
 **No service writes into another layer's schema.** This is enforced by Postgres:
 `symfony` has no CREATE/INSERT on `mart`, `analytics` has none on `raw`/`canonical`.
 Read access to the other layer is auto-granted on future tables via

@@ -30,3 +30,14 @@ services:
     tty: true
 ###> symfony/mercure-bundle ###
 ###< symfony/mercure-bundle ###
+
+  analytics:
+    # Separate tag so the dev image doesn't clobber the prod one in the local cache.
+    image: ${IMAGES_PREFIX:-}movieshelf-analytics-dev
+    build:
+      target: dev
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      # Edit jobs and the crontab without rebuilding. The venv lives in /opt,
+      # so this mount does not shadow it.
+      - ./analytics:/app

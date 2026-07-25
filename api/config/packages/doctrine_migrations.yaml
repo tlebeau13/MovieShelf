@@ -4,3 +4,11 @@ doctrine_migrations:
         # as migrations classes should NOT be autoloaded
         'DoctrineMigrations': '%kernel.project_dir%/migrations'
     enable_profiler: false
+    storage:
+        table_storage:
+            # Schema-qualified on purpose. Unqualified, the bookkeeping table
+            # follows the symfony role's search_path (canonical, raw, public)
+            # and lands in `canonical`, polluting a layer meant for domain
+            # entities only. The `migrations` schema is created in
+            # db/init/02-schemas.sql and owned by the symfony role.
+            table_name: migrations.doctrine_migration_versions

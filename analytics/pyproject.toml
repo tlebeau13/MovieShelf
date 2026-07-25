@@ -1,0 +1,47 @@
+[project]
+name = "movieshelf-analytics"
+version = "0.1.0"
+description = "Reads RAW/canonical, computes, writes MART. Runs on its own container cron."
+readme = "README.md"
+# Pinned, not a floor: the image, the lockfile and CI must all agree on 3.12.
+requires-python = "==3.12.*"
+dependencies = [
+    "pandas>=2.2",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "rapidfuzz>=3.9",
+]
+
+[project.optional-dependencies]
+# scikit-learn is listed as optional in issue #3 and only earns its place in #15.
+# Kept out of the default install so the runtime image stays small.
+ml = ["scikit-learn>=1.5"]
+
+[project.scripts]
+hello = "analytics.jobs.hello:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/analytics"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: needs a live PostgreSQL (skipped when DATABASE_URL is unset)",
+]
