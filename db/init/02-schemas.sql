@@ -8,6 +8,12 @@ CREATE SCHEMA raw       AUTHORIZATION symfony;    -- Symfony writes ingested sna
 CREATE SCHEMA canonical AUTHORIZATION symfony;    -- Symfony writes enriched entities
 CREATE SCHEMA mart      AUTHORIZATION analytics;  -- Python writes analytics tables
 
+-- Tooling bookkeeping, not data. Doctrine's migration_versions table lives here:
+-- unqualified it would follow symfony's search_path into `canonical`, and `public`
+-- is revoked below on purpose. Keeping it separate means neither data layer carries
+-- tool state. See api/config/packages/doctrine_migrations.yaml.
+CREATE SCHEMA migrations AUTHORIZATION symfony;
+
 -- ── Cross-layer READ access (USAGE lets a role "see into" a schema) ───────────
 GRANT USAGE ON SCHEMA raw, canonical TO analytics; -- Python reads Symfony's layers
 GRANT USAGE ON SCHEMA mart           TO symfony;   -- Symfony reads Python's marts

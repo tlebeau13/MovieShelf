@@ -1,0 +1,10 @@
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+.git
+.gitignore
+# README.md is NOT ignored: pyproject.toml declares it as the project readme and
+# hatchling fails the build without it.

@@ -44,6 +44,18 @@ services:
     depends_on:
       db: { condition: service_healthy }
 
+  analytics:
+    build:
+      context: ./analytics
+    image: ${IMAGES_PREFIX:-}movieshelf-analytics
+    restart: unless-stopped
+    environment:
+      # Connects as the restricted "analytics" role: RO on raw + canonical,
+      # RW on mart. Never the superuser, and never the symfony role.
+      DATABASE_URL: postgresql://analytics:${ANALYTICS_DB_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db: { condition: service_healthy }
+
   db:
     image: postgres:16-alpine
     # POSTGRES_* configure the superuser + default database (created by the image).
