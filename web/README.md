@@ -49,7 +49,14 @@ it cannot render on the server.
 ## Running
 
 ```bash
-yarn dev     # http://localhost:3000
+yarn dev        # http://localhost:3000
 yarn build
 yarn lint
+yarn typecheck
+yarn test       # vitest, single run
 ```
+
+Tests run under **vitest** in the `node` environment. What is worth testing here
+is `lib/api/client.ts` — the single door to the API, so its error handling decides
+what every future page can render. The charts are Recharts' code and would need a
+real browser to say anything useful about, which is not worth a jsdom setup.

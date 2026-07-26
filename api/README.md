@@ -1,4 +1,4 @@
-# api/ — Symfony 7
+# api/ — Symfony 8.1
 
 Owns **ingestion, orchestration, canonical entities, and the REST API**.
 
@@ -14,7 +14,21 @@ Owns **ingestion, orchestration, canonical entities, and the REST API**.
 Symfony writes **RAW + canonical**. It only **reads** MART.
 It must never write MART tables — those belong to `analytics/`.
 
+## Checks
+
+```bash
+docker compose exec php bin/phpunit                     # needs a live DB
+docker compose exec php vendor/bin/php-cs-fixer check    # report only
+docker compose exec php vendor/bin/php-cs-fixer fix      # rewrite
+```
+
+`make api-lint` adds `composer validate`, `lint:container` and `lint:yaml` — the
+same set CI runs. Coding standards are the `@Symfony` ruleset
+(`.php-cs-fixer.dist.php`); the tool is a dev dependency, so it exists in the dev
+image only.
+
 ## Stack
-Symfony 7.x, PHP 8.3+, Doctrine ORM, HTTP Client, Messenger, Scheduler.
+Symfony 8.1, PHP 8.5, Doctrine ORM 3, Messenger, Scheduler. HTTP Client arrives
+with the ingestion services (#5–#7) — it is not a dependency yet.
 Served by **FrankenPHP** (single container, built on Caddy — no separate nginx +
 php-fpm). Automatic HTTPS on deploy; worker mode available as a later perf step.

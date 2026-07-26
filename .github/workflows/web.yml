@@ -1,0 +1,65 @@
+# The one component with no container: yarn runs on the host locally, so it runs
+# on the runner here too. `yarn build` stands in for the Docker build check the
+# other components get, until web/ gains a Dockerfile.
+name: web
+
+on:
+  pull_request:
+    paths:
+      - web/**
+      - .github/workflows/web.yml
+  push:
+    branches: [main]
+    paths:
+      - web/**
+      - .github/workflows/web.yml
+  workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  checks:
+    name: Lint, types, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable yarn 4
+        # Before setup-node, not after: setup-node's yarn cache probe shells out
+        # to yarn, and without corepack that resolves to the runner's yarn 1
+        # rather than the version `packageManager` pins.
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          # From web/.nvmrc, so CI and local nvm users read the same pin.
+          node-version-file: web/.nvmrc
+          cache: yarn
+          cache-dependency-path: web/yarn.lock
+
+      - name: Install dependencies
+        # --immutable fails rather than rewriting yarn.lock, which is the point
+        # of committing it.
+        run: yarn install --immutable
+
+      - name: Lint (eslint)
+        run: yarn lint
+
+      - name: Typecheck (tsc)
+        run: yarn typecheck
+
+      - name: Tests (vitest)
+        run: yarn test
+
+      - name: Production build
+        run: yarn build

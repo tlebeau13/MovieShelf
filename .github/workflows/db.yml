@@ -1,0 +1,69 @@
+# Owns the contract itself: the RAW/canonical/MART write boundary, driven from
+# both roles at once. The per-component workflows each hold a single connection
+# and so can only prove their own side; this one proves neither role can reach
+# into the other's layer. See issue #19 and ARCHITECTURE.md.
+name: db
+
+on:
+  pull_request:
+    paths:
+      - db/**
+      - compose.yaml
+      # Loaded automatically by every compose command below, including this
+      # workflow's, so a broken override breaks this job too.
+      - compose.override.yaml
+      - .env.example
+      - .github/workflows/db.yml
+  push:
+    branches: [main]
+    paths:
+      - db/**
+      - compose.yaml
+      # Loaded automatically by every compose command below, including this
+      # workflow's, so a broken override breaks this job too.
+      - compose.override.yaml
+      - .env.example
+      - .github/workflows/db.yml
+  workflow_dispatch:
+
+concurrency:
+  group: db-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Write boundary (both roles)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint shell scripts
+        run: shellcheck db/init/*.sh db/*.sh
+
+      - name: Provide env for compose
+        # .env is gitignored; CI uses the committed example (throwaway passwords).
+        run: cp .env.example .env
+
+      - name: Validate docker-compose config
+        run: docker compose config -q
+
+      - name: Boot Postgres
+        # Only db: verify-contract.sh drives both roles through psql inside this
+        # container and creates its own probe tables, so no application image
+        # needs building here.
+        run: docker compose up -d --wait --wait-timeout 120 db
+
+      - name: Neither role can write the other's layer
+        run: ./db/verify-contract.sh
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs db
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v

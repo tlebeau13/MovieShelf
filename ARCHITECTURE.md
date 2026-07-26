@@ -289,7 +289,11 @@ matching; GitHub Actions CI; basic logging and metrics.
   SPA"; a Next.js app was chosen for the stronger fullstack signal.*
 - **Docker** + `docker compose`
 - **Deployment:** undecided — Fly.io / Railway / VPS all still on the table
-- **CI:** GitHub Actions (phpunit + pytest + shellcheck + linters)
+- **CI:** GitHub Actions — one path-filtered workflow per component (`api`,
+  `analytics`, `web`, `db`), so a PR runs the checks of the components it
+  touches: PHP-CS-Fixer + PHPUnit, ruff + pytest, eslint + tsc + vitest,
+  shellcheck + `verify-contract.sh`, plus a build of each production image
+  (which the dev stack never exercises). `make check` runs the same set locally.
 
 Tooling lives in containers, not on the host: composer runs in the `php`
 container, pytest and ruff in `analytics`. `web/` is the exception — yarn runs on
