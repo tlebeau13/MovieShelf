@@ -1,8 +1,12 @@
 """The write boundary from db/README.md, asserted rather than documented.
 
-Scope is deliberately one-directional: this issue (#3) only owes proof that the
-analytics role cannot write RAW or canonical. The symfony-cannot-write-MART half
-of the matrix, and wiring any of it into CI, belong to #19.
+This is the `analytics` half of the matrix; api/tests/Integration/WriteBoundaryTest.php
+owns the `symfony` half. Both run through their service's own connection layer on
+purpose: the claim under test is not "the grants are right" but "the connection
+this service actually opens is the constrained one".
+
+Cross-role writes need a table the other role owns, which no single connection
+can set up. db/verify-contract.sh drives both roles and covers those.
 """
 
 from __future__ import annotations
@@ -37,6 +41,28 @@ def assert_denied(sql: str) -> None:
     )
 
 
+def default_privileges_for(schema: str) -> list[str]:
+    """Privileges analytics will hold on tables created in `schema` from now on."""
+    sql = text("""
+        SELECT DISTINCT a.privilege_type
+        FROM pg_default_acl d
+        JOIN pg_namespace n ON n.oid = d.defaclnamespace
+        CROSS JOIN aclexplode(d.defaclacl) a
+        WHERE n.nspname = :schema
+          AND d.defaclobjtype = 'r'
+          AND a.grantee = current_user::regrole
+        ORDER BY 1
+    """)
+    with connection() as conn:
+        return list(conn.execute(sql, {"schema": schema}).scalars())
+
+
+def test_connects_as_the_analytics_role():
+    """Everything below is meaningless if the DSN drifted to the superuser."""
+    with connection() as conn:
+        assert conn.execute(text("SELECT current_user")).scalar() == "analytics"
+
+
 def test_can_read_raw():
     """Read access is the other half of the contract — a denial here is also a bug."""
     with connection() as conn:
@@ -62,6 +88,27 @@ def test_cannot_create_table_in_raw():
 def test_cannot_create_table_in_canonical():
     """canonical has no tables yet (#9), so CREATE is the only reachable write."""
     assert_denied("CREATE TABLE canonical.intruder (id INT)")
+
+
+@pytest.mark.parametrize("schema", ["raw", "canonical"])
+def test_future_tables_are_readable_but_not_writable(schema):
+    """The promise ALTER DEFAULT PRIVILEGES makes, for every table not written yet.
+
+    Anything beyond SELECT here would be a silent write path into a layer we do
+    not own, opening on its own the next time Symfony runs a migration.
+    """
+    assert default_privileges_for(schema) == ["SELECT"]
+
+
+def test_has_no_create_privilege_on_symfony_schemas():
+    with connection() as conn:
+        for schema in ("raw", "canonical"):
+            assert not conn.execute(
+                text("SELECT has_schema_privilege(current_user, :s, 'CREATE')"), {"s": schema}
+            ).scalar(), f"analytics can add tables to {schema}"
+            assert conn.execute(
+                text("SELECT has_schema_privilege(current_user, :s, 'USAGE')"), {"s": schema}
+            ).scalar(), f"analytics cannot see into {schema}, so reads are broken"
 
 
 def test_can_write_own_mart_schema():

@@ -6,19 +6,21 @@ on:
     branches: [main]
 
 jobs:
-  # The only executable code so far is the DB contract (schemas, roles, grants).
-  # As the other components land, add sibling jobs:
-  #   api-tests      -> PHP setup + composer install + phpunit   (issue #2)
-  #   analytics-tests-> Python setup + pip install + pytest       (issue #3)
-  #   web-tests      -> Node setup + npm ci + lint + build        (issue #4)
-  db-contract:
-    name: DB contract (schemas · roles · write-boundary)
+  # The RAW/canonical/MART write boundary, verified from three angles: each
+  # service's own suite proves the connection *it* opens is constrained, and
+  # db/verify-contract.sh drives both roles to prove neither can write into the
+  # other's layer. See issue #19 and ARCHITECTURE.md.
+  #
+  # As the last component lands, add a sibling job:
+  #   web-tests -> Node setup + yarn install + lint + build   (issue #4)
+  write-boundary:
+    name: Write boundary (db grants · api · analytics)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Lint init shell scripts
-        run: shellcheck db/init/*.sh
+      - name: Lint shell scripts
+        run: shellcheck db/init/*.sh db/*.sh
 
       - name: Provide env for compose
         # .env is gitignored; CI uses the committed example (throwaway passwords).
@@ -27,38 +29,31 @@ jobs:
       - name: Validate docker-compose config
         run: docker compose config -q
 
-      - name: Boot the database
-        # --wait blocks until the healthcheck passes (or fails the step).
-        run: docker compose up -d --wait db
+      - name: Hand the workspace to the container user
+        # compose.override.yaml bind-mounts api/ and analytics/ and runs both
+        # containers as uid 1000, but the runner checks out as 1001. Without
+        # this the entrypoint's `composer install` cannot write vendor/.
+        run: sudo chown -R 1000:1000 api analytics
 
-      - name: Verify the RAW / canonical / MART contract
-        run: |
-          set -euo pipefail
-          q() { docker compose exec -T db psql -v ON_ERROR_STOP=1 -U "$1" -d cineshelf -tAc "$2"; }
+      - name: Boot the stack
+        # Dev targets, not prod: the prod images install --no-dev, so they carry
+        # neither phpunit nor pytest. The php entrypoint installs dependencies
+        # and runs Doctrine migrations before reporting healthy, which is what
+        # creates the RAW table the analytics suite reads.
+        run: docker compose up -d --wait --wait-timeout 600 db php analytics
 
-          echo "→ schemas exist with correct owners"
-          q cineshelf "SELECT nspname||' -> '||pg_get_userbyid(nspowner)
-                       FROM pg_namespace WHERE nspname IN ('raw','canonical','mart') ORDER BY 1"
+      - name: api/ — symfony cannot write MART
+        run: docker compose exec -T php bin/phpunit
 
-          echo "→ owners can write their own layer"
-          q symfony   "CREATE TABLE raw.ci_probe(id int)"
-          q analytics "CREATE TABLE mart.ci_probe(id int)"
+      - name: analytics/ — analytics cannot write RAW or canonical
+        run: docker compose exec -T analytics python -m pytest
 
-          echo "→ write-boundary is enforced (these MUST be denied)"
-          if q symfony   "CREATE TABLE mart.bad(id int)" 2>/dev/null; then
-            echo "::error::symfony was able to write into mart"; exit 1; fi
-          if q analytics "CREATE TABLE raw.bad(id int)" 2>/dev/null; then
-            echo "::error::analytics was able to write into raw"; exit 1; fi
+      - name: db/ — neither role can write the other's layer
+        run: ./db/verify-contract.sh
 
-          echo "→ cross-layer reads work (default privileges)"
-          q analytics "SELECT count(*) FROM raw.ci_probe"
-          q symfony   "SELECT count(*) FROM mart.ci_probe"
-
-          echo "✅ contract holds"
-
-      - name: Dump db logs on failure
+      - name: Dump logs on failure
         if: failure()
-        run: docker compose logs db
+        run: docker compose logs
 
       - name: Teardown
         if: always()

@@ -64,6 +64,13 @@ RUN <<-EOF
 	install-php-extensions xdebug
 	useradd -m -s /bin/bash nonroot
 	git config --system --add safe.directory /app
+	# Docker seeds the caddy_data/caddy_config named volumes from these paths,
+	# ownership included. Without them the volumes are created root-owned, and
+	# FrankenPHP — which compose.override.yaml runs as the host user, not root —
+	# dies on first boot with "mkdir /data/caddy/pki: permission denied" while
+	# generating its local TLS CA. Only the dev image needs this; the prod image
+	# runs as root. 1000:1000 matches the UID/GID defaults in .env.example.
+	install -d -o 1000 -g 1000 /data/caddy /config/caddy
 EOF
 
 COPY --link frankenphp/conf.d/20-app.dev.ini $PHP_INI_DIR/app.conf.d/

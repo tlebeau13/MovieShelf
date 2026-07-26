@@ -1,1 +1,3 @@
 # MovieShelf
+
+[Architecture](ARCHITECTURE.md)

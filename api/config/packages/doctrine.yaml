@@ -21,11 +21,10 @@ doctrine:
                 prefix: 'App\Entity'
                 alias: App
 
-when@test:
-    doctrine:
-        dbal:
-            # "TEST_TOKEN" is typically set by ParaTest
-            dbname_suffix: '_test%env(default::TEST_TOKEN)%'
+# No `when@test` dbname_suffix here, deliberately. The recipe's default points
+# tests at `movieshelf_test`, but schemas and grants are per-database and only
+# db/init builds them — a suffixed database would have no raw/canonical/mart to
+# assert against. Tests run against the real contract database and roll back.
 
 when@prod:
     doctrine:
