@@ -1,8 +1,7 @@
 services:
   php:
-    # Build context is api/ only — the Dockerfile and frankenphp/ live there.
-    # No `target:` here on purpose: the default is the last stage (frankenphp_prod).
-    # compose.override.yaml switches it to frankenphp_dev for local work.
+    # No `target:` here on purpose: the default is the last stage
+    # (frankenphp_prod). compose.override.yaml switches it to frankenphp_dev.
     build:
       context: ./api
     image: ${IMAGES_PREFIX:-}movieshelf-php
@@ -10,18 +9,21 @@ services:
     environment:
       SERVER_NAME: ${SERVER_NAME:-localhost}, php:80
       DEFAULT_URI: https://${SERVER_NAME:-localhost}:${HTTPS_PORT:-443}
+      # Committed api/.env leaves this empty, so without injecting it here the
+      # container signs sessions and CSRF tokens with a blank secret.
+      APP_SECRET: ${APP_SECRET:-}
       MERCURE_PUBLISHER_JWT_KEY: ${CADDY_MERCURE_JWT_SECRET:-!ChangeThisMercureHubJWTSecretKey!}
       MERCURE_SUBSCRIBER_JWT_KEY: ${CADDY_MERCURE_JWT_SECRET:-!ChangeThisMercureHubJWTSecretKey!}
-      # Run "composer require symfony/orm-pack" to install and configure Doctrine ORM
       # Connects as the restricted "symfony" RW role (owns raw + canonical, reads mart) — NOT the superuser.
       DATABASE_URL: postgresql://symfony:${SYMFONY_DB_PASSWORD}@db:5432/${POSTGRES_DB}?serverVersion=16&charset=utf8
-      # Run "composer require symfony/mercure-bundle" to install and configure the Mercure integration
       MERCURE_URL: ${CADDY_MERCURE_URL:-http://php/.well-known/mercure}
       MERCURE_PUBLIC_URL: ${CADDY_MERCURE_PUBLIC_URL:-https://${SERVER_NAME:-localhost}:${HTTPS_PORT:-443}/.well-known/mercure}
       MERCURE_JWT_SECRET: ${CADDY_MERCURE_JWT_SECRET:-!ChangeThisMercureHubJWTSecretKey!}
+      # Ingestion keys come from the root .env, never from api/.env.local:
+      # api/.dockerignore excludes that file, so it does not exist in a built image.
+      NYT_KEY: ${NYT_KEY:-}
+      TMDB_KEY: ${TMDB_KEY:-}
       ###> dunglas/symfony-docker ###
-      # Next lines are only used during initial installation
-      # This block will remove itself after the installation
       SYMFONY_VERSION: ${SYMFONY_VERSION:-}
       STABILITY: ${STABILITY:-stable}
       ###< dunglas/symfony-docker ###
@@ -68,24 +70,15 @@ services:
       SYMFONY_DB_PASSWORD: ${SYMFONY_DB_PASSWORD}
       ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD}
     ports:
-      # Exposed for local tooling (psql, DBeaver). Inside the compose network,
-      # other services reach this as host "db", port 5432.
       - "5432:5432"
     volumes:
-      # Named volume = data survives `docker compose down`. The init scripts below
-      # run ONLY when this volume is empty (first boot). See db/README.md.
       - pgdata:/var/lib/postgresql/data
-      # Scripts here run once, alphabetically, on first init.
       - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      # Lets future services wait with: depends_on: { db: { condition: service_healthy } }
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
-
-###> symfony/mercure-bundle ###
-###< symfony/mercure-bundle ###
 
 volumes:
   pgdata:
