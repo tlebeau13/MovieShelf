@@ -90,6 +90,17 @@ migration: ## Generate a migration from entity changes
 api-test: ## Run PHPUnit in the php container (needs the live DB)
 	$(COMPOSE) exec php bin/phpunit
 
+.PHONY: api-lint
+api-lint: ## Report coding-standard violations without touching files
+	$(COMPOSE) exec php vendor/bin/php-cs-fixer check --diff
+	$(COMPOSE) exec php composer validate --strict --no-check-publish
+	$(COMPOSE) exec php bin/console lint:container
+	$(COMPOSE) exec php bin/console lint:yaml config
+
+.PHONY: api-fix
+api-fix: ## Rewrite files to satisfy PHP-CS-Fixer
+	$(COMPOSE) exec php vendor/bin/php-cs-fixer fix
+
 # ── analytics/ (Python) ──────────────────────────────────────────────────────
 
 .PHONY: analytics-shell
@@ -105,8 +116,14 @@ analytics-test: ## Run pytest in the container (needs the live DB)
 	$(COMPOSE) exec analytics python -m pytest
 
 .PHONY: analytics-lint
-analytics-lint: ## Run ruff
+analytics-lint: ## Run ruff (lint + formatting, read-only)
 	$(COMPOSE) exec analytics ruff check .
+	$(COMPOSE) exec analytics ruff format --check .
+
+.PHONY: analytics-fix
+analytics-fix: ## Apply ruff's autofixes and reformat
+	$(COMPOSE) exec analytics ruff check --fix .
+	$(COMPOSE) exec analytics ruff format .
 
 .PHONY: analytics-venv
 analytics-venv: ## Build the host venv so the editor resolves imports
@@ -128,7 +145,11 @@ web-lint: ## Run eslint
 
 .PHONY: web-types
 web-types: ## Typecheck without emitting
-	cd web && ./node_modules/.bin/tsc --noEmit
+	cd web && yarn typecheck
+
+.PHONY: web-test
+web-test: ## Run vitest once (no watch)
+	cd web && yarn test
 
 .PHONY: web-install
 web-install: ## Install JS dependencies
@@ -175,5 +196,10 @@ db-reset: ## DESTRUCTIVE: drop the database volume and re-run db/init
 # ── Everything ───────────────────────────────────────────────────────────────
 
 .PHONY: check
-check: analytics-lint analytics-test api-test db-verify web-types web-lint ## Run every lint and test suite
+check: api-lint api-test analytics-lint analytics-test db-verify web-lint web-types web-test ## Run every lint and test suite (same set as CI)
 	@echo "all checks passed"
+
+.PHONY: check-images
+check-images: ## Build the production images CI builds (the dev stack never does)
+	docker build --target frankenphp_prod --tag movieshelf-php:check api
+	docker build --target runtime --tag movieshelf-analytics:check analytics

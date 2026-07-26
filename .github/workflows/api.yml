@@ -1,0 +1,98 @@
+name: api
+
+on:
+  pull_request:
+    paths:
+      - api/**
+      - db/init/**
+      - compose.yaml
+      - compose.override.yaml
+      - .env.example
+      - .github/workflows/api.yml
+  push:
+    branches: [main]
+    paths:
+      - api/**
+      - db/init/**
+      - compose.yaml
+      - compose.override.yaml
+      - .env.example
+      - .github/workflows/api.yml
+  workflow_dispatch:
+
+# One run per branch: a second push supersedes the first, which is only worth
+# finishing on main.
+concurrency:
+  group: api-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Nothing here writes to the repo, and no step needs a secret.
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Lint and PHPUnit
+    runs-on: ubuntu-latest
+    # Well above a normal run (~5 min). Guards against a container that never
+    # reports healthy sitting on --wait for the 6-hour default.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provide env for compose
+        # .env is gitignored; CI uses the committed example (throwaway passwords).
+        run: cp .env.example .env
+
+      - name: Validate docker-compose config
+        # Both compose files are in this workflow's paths, so a broken one must
+        # fail here with a parse error rather than mid-boot.
+        run: docker compose config -q
+
+      - name: Hand the workspace to the container user
+        # compose.override.yaml bind-mounts api/ and runs the container as uid
+        # 1000, but the runner checks out as 1001. Without this the entrypoint's
+        # `composer install` cannot write vendor/.
+        run: sudo chown -R 1000:1000 api
+
+      - name: Boot Postgres and PHP
+        # The dev target, not prod: the prod image installs --no-dev, so it
+        # carries neither PHPUnit nor PHP-CS-Fixer. The entrypoint installs
+        # dependencies and runs Doctrine migrations before reporting healthy.
+        run: docker compose up -d --wait --wait-timeout 600 db php
+
+      - name: composer.json is well formed
+        run: docker compose exec -T php composer validate --strict --no-check-publish
+
+      - name: Coding standards (PHP-CS-Fixer)
+        run: docker compose exec -T php vendor/bin/php-cs-fixer check --diff
+
+      - name: Service container compiles
+        run: docker compose exec -T php bin/console lint:container
+
+      - name: YAML config is valid
+        run: docker compose exec -T php bin/console lint:yaml config
+
+      - name: PHPUnit — symfony cannot write MART
+        run: docker compose exec -T php bin/phpunit
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v
+
+  image:
+    name: Production image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build frankenphp_prod
+        # Built explicitly rather than through compose: compose.override.yaml is
+        # picked up automatically and would switch the target back to dev, so
+        # nothing else in CI ever exercises the prod stage.
+        run: docker build --target frankenphp_prod --tag movieshelf-php:ci api

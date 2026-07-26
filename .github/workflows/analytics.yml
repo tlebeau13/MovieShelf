@@ -1,0 +1,90 @@
+name: analytics
+
+on:
+  pull_request:
+    paths:
+      - analytics/**
+      - db/init/**
+      - compose.yaml
+      - compose.override.yaml
+      - .env.example
+      - .github/workflows/analytics.yml
+  push:
+    branches: [main]
+    paths:
+      - analytics/**
+      - db/init/**
+      - compose.yaml
+      - compose.override.yaml
+      - .env.example
+      - .github/workflows/analytics.yml
+  workflow_dispatch:
+
+concurrency:
+  group: analytics-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Ruff and pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Provide env for compose
+        # .env is gitignored; CI uses the committed example (throwaway passwords).
+        run: cp .env.example .env
+
+      - name: Validate docker-compose config
+        run: docker compose config -q
+
+      - name: Hand the workspace to the container user
+        # compose.override.yaml bind-mounts both api/ and analytics/ and runs the
+        # containers as uid 1000, but the runner checks out as 1001. api/ is in
+        # the list even though this is the analytics suite: php boots here too,
+        # and without a writable api/ its entrypoint dies on `composer install`
+        # ("/app/vendor does not exist and could not be created"), so the
+        # migration that creates raw.ingest_heartbeat never runs.
+        run: sudo chown -R 1000:1000 api analytics
+
+      - name: Boot Postgres, PHP and analytics
+        # php is here despite this being the analytics suite: the tests read
+        # raw.ingest_heartbeat, a table the symfony role owns, and it is the php
+        # entrypoint that runs the Doctrine migration creating it. Dev targets,
+        # because the prod images install without dev dependencies and so carry
+        # neither pytest nor ruff.
+        run: docker compose up -d --wait --wait-timeout 600 db php analytics
+
+      - name: Lint (ruff)
+        run: docker compose exec -T analytics ruff check .
+
+      - name: Formatting (ruff format)
+        run: docker compose exec -T analytics ruff format --check .
+
+      - name: pytest — analytics cannot write RAW or canonical
+        run: docker compose exec -T analytics python -m pytest
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Teardown
+        if: always()
+        run: docker compose down -v
+
+  image:
+    name: Production image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build runtime
+        # Built explicitly rather than through compose: compose.override.yaml is
+        # picked up automatically and would switch the target back to dev, so
+        # nothing else in CI ever exercises the runtime stage.
+        run: docker build --target runtime --tag movieshelf-analytics:ci analytics

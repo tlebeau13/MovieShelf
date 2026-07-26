@@ -44,7 +44,12 @@ docker compose exec analytics hello  # run a job now, without waiting for cron
 docker compose logs -f analytics     # watch scheduled runs
 docker compose exec analytics python -m pytest   # permission tests
 docker compose exec analytics ruff check .
+docker compose exec analytics ruff format --check .
 ```
+
+`make analytics-lint` runs both ruff passes, `make analytics-fix` applies them.
+Formatting is `ruff format` rather than black: it is black-compatible output from
+a tool already in the lockfile.
 
 The `DATABASE_URL` is injected by `compose.yaml` and connects as the restricted
 `analytics` role — RO on `raw`/`canonical`, RW on `mart`. There is no code
