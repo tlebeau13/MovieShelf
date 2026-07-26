@@ -14,7 +14,7 @@ write-boundary is enforced by ownership + grants rather than convention.
 |-------------|----------------------------------------------------------|----------------|------------------|
 | `raw`       | `raw.nyt_snapshot`, `raw.tmdb_snapshot`                  | `symfony`      | `analytics` (RO) |
 | `canonical` | `canonical.book`, `canonical.film`, `canonical.adaptation` | `symfony`    | `analytics` (RO) |
-| `mart`      | `mart.bestseller_longevity`, `mart.genre_trend`, …       | `analytics`    | `symfony` (RO)   |
+| `mart`      | `mart.rank_series`, `mart.bestseller_longevity`, `mart.film_genre_trend`, … | `analytics` | `symfony` (RO) |
 
 A fourth schema, `migrations`, holds Doctrine's `doctrine_migration_versions`
 bookkeeping table. It is tooling state, not data: unqualified it would follow the

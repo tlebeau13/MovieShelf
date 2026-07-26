@@ -1,7 +1,9 @@
 # MovieShelf
 
-Bestseller lists (NYT) crossed with their screen adaptations (TMDB). Four
-components, one Postgres database.
+Bestseller lists (NYT) and film metadata (TMDB): how books chart over time, and
+which genres publishing and film pursue. Linking individual books to their screen
+adaptations is phase 3, not the premise — see README.md. Four components, one
+Postgres database.
 
 | Dir          | Stack                          | Owns                                    |
 |--------------|--------------------------------|-----------------------------------------|
