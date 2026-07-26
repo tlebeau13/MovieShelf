@@ -86,6 +86,10 @@ migrate: ## Apply pending Doctrine migrations
 migration: ## Generate a migration from entity changes
 	$(COMPOSE) exec php bin/console make:migration
 
+.PHONY: api-test
+api-test: ## Run PHPUnit in the php container (needs the live DB)
+	$(COMPOSE) exec php bin/phpunit
+
 # ── analytics/ (Python) ──────────────────────────────────────────────────────
 
 .PHONY: analytics-shell
@@ -152,6 +156,10 @@ db-grants: ## Show who can write what (the contract, as the DB sees it)
 		WHERE table_schema IN ('raw','canonical','mart') \
 		GROUP BY table_schema, grantee ORDER BY table_schema, grantee;"
 
+.PHONY: db-verify
+db-verify: ## Prove the write boundary end to end, driving both roles
+	./db/verify-contract.sh
+
 .PHONY: db-reset
 db-reset: ## DESTRUCTIVE: drop the database volume and re-run db/init
 	@# Only the pgdata volume, deliberately. `docker compose down -v` would also
@@ -167,5 +175,5 @@ db-reset: ## DESTRUCTIVE: drop the database volume and re-run db/init
 # ── Everything ───────────────────────────────────────────────────────────────
 
 .PHONY: check
-check: analytics-lint analytics-test web-types web-lint ## Run every lint and test suite
+check: analytics-lint analytics-test api-test db-verify web-types web-lint ## Run every lint and test suite
 	@echo "all checks passed"

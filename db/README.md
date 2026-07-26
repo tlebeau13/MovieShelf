@@ -26,14 +26,38 @@ on purpose. See `api/config/packages/doctrine_migrations.yaml`.
 Read access to the other layer is auto-granted on future tables via
 `ALTER DEFAULT PRIVILEGES` (see `init/02-schemas.sql`).
 
+### Where that claim is tested
+
+The boundary is checked from three angles, all of which run in CI:
+
+| What | Proves |
+|------|--------|
+| `api/tests/Integration/WriteBoundaryTest.php` | The connection **Symfony itself opens** is the `symfony` role, and it is refused on `mart` |
+| `analytics/tests/test_permissions.py`         | The connection **Python itself opens** is the `analytics` role, and it is refused on `raw`/`canonical` |
+| `verify-contract.sh` (`make db-verify`)       | Cross-role writes: neither role can touch a table the *other* one owns |
+
+The split exists because a service's own suite holds one connection, so it can
+never set up the interesting case — a table owned by the other role to be denied
+on. `verify-contract.sh` opens both, and is the only one that can.
+
+Two traps worth knowing, both already handled:
+
+- The service suites assert the **whole** privilege set that
+  `ALTER DEFAULT PRIVILEGES` hands out, not just that `SELECT` is present.
+  Anything beyond `SELECT` there is a write path that opens by itself on the
+  next migration.
+- A self-`GRANT` on tables you do not own is a **no-op with a `WARNING`**, not an
+  error. Escalation is therefore checked by effect (is the write still refused?)
+  rather than by exit code.
+
 ## Roles & connection strings
 
 Two login roles, created by `init/01-roles.sh` from `.env`:
 
 | Role        | Used by      | Example DSN                                             |
 |-------------|--------------|--------------------------------------------------------|
-| `symfony`   | `api/`       | `postgresql://symfony:<pw>@db:5432/cineshelf`           |
-| `analytics` | `analytics/` | `postgresql://analytics:<pw>@db:5432/cineshelf`         |
+| `symfony`   | `api/`       | `postgresql://symfony:<pw>@db:5432/movieshelf`           |
+| `analytics` | `analytics/` | `postgresql://analytics:<pw>@db:5432/movieshelf`         |
 
 (Host is `db` inside the compose network, `localhost` from your machine.)
 
@@ -43,6 +67,7 @@ Two login roles, created by `init/01-roles.sh` from `.env`:
 ## Contents
 - `init/01-roles.sh` — creates the `symfony` + `analytics` login roles.
 - `init/02-schemas.sql` — creates schemas, ownership, cross-read grants, default privileges.
+- `verify-contract.sh` — asserts all of the above against a running stack (`make db-verify`).
 
 ## ⚠️ Init scripts run ONCE
 
