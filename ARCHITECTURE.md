@@ -167,7 +167,7 @@ to serve history retroactively, so that premise no longer holds.
 
 | Source | History mechanism | Binding constraint |
 |---|---|---|
-| NYT | `lists/{date}/{list-name}.json` accepts a **past date**, not only `current` | **1,000 requests/day.** 52 weeks × 18 years ≈ 936 requests — one day's entire quota, for one list |
+| NYT | `lists/{date}/{list-name}.json` accepts a **past date**, not only `current` | **1,000 requests/day**, plus an *undocumented* burst cap — sequential probes ~7s apart already drew a `429` (#28). 52 weeks × 18 years ≈ 936 requests — one day's entire quota, for one list. The crawler needs per-request throttling and 429 retry, not just a daily counter |
 | TMDB genres | `discover/movie` with `primary_release_date.gte/.lte`, bucketed on release date | 20 results/page × 500 pages = **10,000 items per query**, so windows must be partitioned to stay under it |
 | TMDB `popularity` | none — genuinely point-in-time | Accumulates forward only |
 | Open Library | not time-varying; subjects are a property of the work | — |
@@ -200,14 +200,54 @@ Only the scaffolding tables exist today (`raw.ingest_heartbeat`,
 
 ### RAW — written by Symfony
 
-**`raw.nyt_snapshot`** — one row per book per date
-`id`, `list_name`, `rank`, `isbn13`, `title`, `author`, `weeks_on_list`, `snapshot_date`
+**`raw.ingestion_run`** — one row per ingestion attempt, shared by every source (#29)
+`id`, `source`, `target` (the list / window / query fetched), `started_at`,
+`finished_at`, `status`, `requests_made`, `cursor`, `error`
+
+The run record is the source-agnostic spine. Every snapshot row below carries a
+`run_id` back to it, so "what did this crawl cover, how far did it get, can it
+resume" is answered the same way for NYT, TMDB, or a source added years later.
+`cursor` is what makes the budget-aware backfill (§6) resumable — it records where
+a multi-day job stopped when the daily quota ran out.
+
+**`raw.nyt_snapshot`** — one row per book per list per week
+`id`, `run_id`, `list_name`, `rank`, `rank_last_week`, `isbn13`, `title`,
+`author`, `weeks_on_list`, `published_date`
+
+- `published_date` is NYT's own list key (always a Sunday), not our fetch clock —
+  the API snaps any requested date to it. It is what makes two crawls of the same
+  week idempotent.
+- `rank_last_week` is stored as the source gives it, where **`0` means "off the
+  list last week"**, not rank zero. Kept in RAW because it survives ingestion gaps
+  that a computed week-over-week delta would get wrong (§6, #28).
+- `list_name` scopes the row to one of NYT's ~dozen weekly lists. Phase 1 ingests
+  **Hardcover Fiction** only; widening to more lists is more rows under the same
+  schema, not a migration.
 
 **`raw.tmdb_snapshot`**
-`id`, `tmdb_id`, `media_type`, `title`, `popularity`, `vote_average`, `vote_count`, `rank`, `snapshot_date`
+`id`, `run_id`, `tmdb_id`, `media_type`, `title`, `popularity`, `vote_average`, `vote_count`, `rank`, `snapshot_date`
 
 **`raw.openlibrary_snapshot`**
-`id`, `isbn13`, `subjects`, `first_publish_year`, `fetched_at`
+`id`, `run_id`, `isbn13`, `subjects`, `first_publish_year`, `fetched_at`
+
+### Adding a source is plug-and-play by construction
+
+The point of the shapes above is that a new source touches only its own edges, not
+the machinery. Three seams are shared, so what a new source has to supply is small:
+
+| Shared (write once) | Per-source (supply for each) |
+|---|---|
+| `raw.ingestion_run` — run tracking, resume cursor, budget accounting | one `raw.<source>_snapshot` table with the fields that source actually returns |
+| Abstract ingestion service — throttle, 429 retry, run open/close, persistence | `fetch` / `parse` / `map` for this source's endpoint and payload |
+| Scheduler + Messenger cadence, and a config-declared source registry (name, endpoint, cadence, daily budget) | one registry entry and one Doctrine migration |
+
+So a fourth source (OMDb, a second bestseller list provider, anything) is: a
+migration for its snapshot table, one class implementing the ingestion contract,
+one registry line. The run record, retry/throttle logic, resume behaviour, and the
+RAW→canonical→MART flow are inherited untouched. RAW stays **one typed table per
+source** rather than a single generic `jsonb` blob on purpose: analytics reads RAW
+with pandas, and typed columns keep that honest and queryable — the modularity
+lives in the shared *machinery*, not in erasing each source's real shape.
 
 ### Canonical — written by Symfony
 

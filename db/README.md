@@ -12,7 +12,7 @@ write-boundary is enforced by ownership + grants rather than convention.
 
 | Schema      | Tables (arrive in later issues)                          | Writer / owner | Readers          |
 |-------------|----------------------------------------------------------|----------------|------------------|
-| `raw`       | `raw.nyt_snapshot`, `raw.tmdb_snapshot`                  | `symfony`      | `analytics` (RO) |
+| `raw`       | `raw.ingestion_run`, `raw.nyt_snapshot`, `raw.tmdb_snapshot`, … | `symfony`      | `analytics` (RO) |
 | `canonical` | `canonical.book`, `canonical.film`, `canonical.adaptation` | `symfony`    | `analytics` (RO) |
 | `mart`      | `mart.rank_series`, `mart.bestseller_longevity`, `mart.film_genre_trend`, … | `analytics` | `symfony` (RO) |
 
@@ -63,6 +63,41 @@ Two login roles, created by `init/01-roles.sh` from `.env`:
 
 - **#2 (Doctrine):** map RAW/canonical entities to schema `raw` / `canonical`.
 - **#3 (SQLAlchemy):** target schema `mart` for writes; read `raw`/`canonical`.
+
+## Source coverage (verified, #28)
+
+The historical range each source actually serves — what #12/#13/#17 chart against,
+confirmed with live calls, not docs.
+
+| Source | Endpoint | Range | Cadence |
+|--------|----------|-------|---------|
+| NYT Books | `lists/{date}/{list}.json` | back to **at least 2008-06** (200s from 2008-06-15 on; 2008 boundary not pinned) → present | weekly, `published_date` snaps to Sunday |
+| TMDB | `discover/movie` | full catalogue, windowed by `primary_release_date` | n/a (from docs; live check pending key) |
+
+Both serve history retroactively, so backfill is a direct dated crawl, not a
+forward-only feed.
+
+### NYT `raw.nyt_snapshot` — field notes for #6
+
+Verified against a live `hardcover-fiction` response (dump: one per endpoint kept
+out of git; regenerate with a key). Per-book fields that matter:
+
+- **`primary_isbn13`** — present on every row; the join key to Open Library.
+  `primary_isbn10` is sometimes empty — do not rely on it.
+- **`weeks_on_list`** — reliably populated (observed 1–40), not sparse.
+- **`rank_last_week = 0`** is a **sentinel for "not on the list last week"**, not a
+  missing value. Every new entry (`weeks_on_list = 1`) carries it. Trajectory math
+  in #12/#17 must treat 0 as absence, not rank zero.
+- **Two dates**: `bestsellers_date` (the sales week measured) vs `published_date`
+  (when NYT published the list, always a Sunday). `published_date` is the list key.
+- **`price` is `"0.00"`** across the board — NYT no longer publishes it. Dead field.
+
+### NYT rate limits — for #6's crawler
+
+Documented: 1,000 requests/day. **Undocumented burst cap observed**: sequential
+probes at ~7s spacing drew a `429`. The daily quota already forces a multi-day
+resumable job; the burst cap means it also needs per-request throttling and retry
+on 429, not just a daily counter.
 
 ## Contents
 - `init/01-roles.sh` — creates the `symfony` + `analytics` login roles.

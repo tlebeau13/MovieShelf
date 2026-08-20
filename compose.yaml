@@ -31,15 +31,21 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     ports:
+      # host_ip pins these to the loopback: docker's published ports bypass ufw,
+      # and APP_ENV=dev serves the profiler and the Mercure demo. Override BIND_IP
+      # (0.0.0.0) when the site really has to answer off-host.
       - name: http
+        host_ip: ${BIND_IP:-127.0.0.1}
         target: 80
         published: ${HTTP_PORT:-80}
         protocol: tcp
       - name: https
+        host_ip: ${BIND_IP:-127.0.0.1}
         target: 443
         published: ${HTTPS_PORT:-443}
         protocol: tcp
       - name: http3
+        host_ip: ${BIND_IP:-127.0.0.1}
         target: 443
         published: ${HTTP3_PORT:-443}
         protocol: udp
@@ -70,7 +76,9 @@ services:
       SYMFONY_DB_PASSWORD: ${SYMFONY_DB_PASSWORD}
       ANALYTICS_DB_PASSWORD: ${ANALYTICS_DB_PASSWORD}
     ports:
-      - "5432:5432"
+      # Bound to the loopback: nothing outside this host needs the database, and
+      # docker's published ports bypass ufw. Override BIND_IP to expose it.
+      - "${BIND_IP:-127.0.0.1}:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
