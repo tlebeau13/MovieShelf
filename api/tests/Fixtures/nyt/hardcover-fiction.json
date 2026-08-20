@@ -1,0 +1,134 @@
+{
+  "status": "OK",
+  "copyright": "Copyright (c) 2026 The New York Times Company. All Rights Reserved.",
+  "num_results": 15,
+  "last_modified": "2026-08-05T17:45:13Z",
+  "results": {
+    "display_name": "Hardcover Fiction",
+    "list_name": "Hardcover Fiction",
+    "list_name_encoded": "hardcover-fiction",
+    "previous_published_date": "2026-08-09",
+    "published_date": "2026-08-16",
+    "next_published_date": "2026-08-23",
+    "bestsellers_date": "2026-08-01",
+    "normal_list_ends_at": 15,
+    "updated": "WEEKLY",
+    "list_id": 1,
+    "uri": "nyt://bestsellerslist/f6610c52-fc98-5c7f-8cc5-49657c9744f2",
+    "books": [
+      {
+        "age_group": "",
+        "amazon_product_url": "https://www.amazon.com/dp/B0GN38SNGB?tag=thenewyorktim-20",
+        "article_chapter_link": "",
+        "asterisk": 0,
+        "author": "H.M. Wolfe",
+        "book_image": "https://static01.nyt.com/bestsellers/images/9798347122363.jpg",
+        "book_image_height": 500,
+        "book_image_width": 344,
+        "book_review_link": "",
+        "book_uri": "nyt://book/fe014d87-c506-5226-9944-45f1a2b4e409",
+        "contributor": "by H.M. Wolfe",
+        "contributor_note": "",
+        "created_date": "2026-08-19T17:19:36.725Z",
+        "dagger": 0,
+        "description": "In a city divided by privilege and poverty, a mercenary is forced to marry the president’s son, whom she attempted to kill.",
+        "first_chapter_link": "",
+        "price": "0.00",
+        "primary_isbn10": "",
+        "primary_isbn13": "9798347122363",
+        "publisher": "Scarlett",
+        "rank": 1,
+        "rank_last_week": 0,
+        "sunday_review_link": "",
+        "title": "DAGGERMOUTH",
+        "updated_date": "2026-08-19T17:19:36.725Z",
+        "weeks_on_list": 1,
+        "isbns": [
+          {
+            "isbn10": "",
+            "isbn13": "9798347122363"
+          }
+        ],
+        "buy_links": [
+          {
+            "name": "Amazon",
+            "url": "https://www.amazon.com/dp/B0GN38SNGB?tag=thenewyorktim-20"
+          },
+          {
+            "name": "Apple Books",
+            "url": "https://goto.applebooks.apple/9798347122363?at=10lIEQ"
+          },
+          {
+            "name": "Barnes & Noble",
+            "url": "https://barnesandnoble.sjv.io/c/197432/1961179/22009?prodsku=9798347122363&u=https%3A%2F%2Fwww.barnesandnoble.com%2Fw%2Fdaggermouth-h-m-wolfe%2F1149473002%3Fean%3D9798347122363&intsrc=APIG_15890"
+          },
+          {
+            "name": "Books-A-Million",
+            "url": "https://www.anrdoezrs.net/click-7990613-35140?url=https%3A%2F%2Fwww.booksamillion.com%2Fp%2FDaggermouth%2FH-M-Wolfe%2F9798347122363"
+          },
+          {
+            "name": "Bookshop.org",
+            "url": "https://bookshop.org/a/3546/9798347122363"
+          }
+        ]
+      },
+      {
+        "age_group": "",
+        "amazon_product_url": "https://www.amazon.com/dp/1954118813?tag=thenewyorktim-20&linkCode=osi&th=1&psc=1",
+        "article_chapter_link": "",
+        "asterisk": 0,
+        "author": "Kathryn Stockett",
+        "book_image": "https://static01.nyt.com/bestsellers/images/9781954118812.jpg",
+        "book_image_height": 400,
+        "book_image_width": 312,
+        "book_review_link": "",
+        "book_uri": "nyt://book/37a1d1e0-131c-5003-8a26-827e5b166569",
+        "contributor": "by Kathryn Stockett",
+        "contributor_note": "",
+        "created_date": "2026-05-13T21:30:50.865Z",
+        "dagger": 0,
+        "description": "As things get tougher during the Depression, several women look for ways to improve their circumstances.",
+        "first_chapter_link": "",
+        "price": "0.00",
+        "primary_isbn10": "",
+        "primary_isbn13": "9781954118812",
+        "publisher": "Spiegel & Grau",
+        "rank": 2,
+        "rank_last_week": 1,
+        "sunday_review_link": "",
+        "title": "THE CALAMITY CLUB",
+        "updated_date": "2026-05-13T21:30:50.865Z",
+        "weeks_on_list": 13,
+        "isbns": [
+          {
+            "isbn10": "",
+            "isbn13": "9781954118812"
+          }
+        ],
+        "buy_links": [
+          {
+            "name": "Amazon",
+            "url": "https://www.amazon.com/dp/1954118813?tag=thenewyorktim-20&linkCode=osi&th=1&psc=1"
+          },
+          {
+            "name": "Apple Books",
+            "url": "https://goto.applebooks.apple/9781954118812?at=10lIEQ"
+          },
+          {
+            "name": "Barnes and Noble",
+            "url": "https://barnesandnoble.sjv.io/c/197432/1961179/22009?prodsku=9781954118812&u=https%3A%2F%2Fwww.barnesandnoble.com%2Fw%2Fthe-calamity-club-kathryn-stockett%2F1147098401%3Fean%3D9781954118812&intsrc=APIG_15890"
+          },
+          {
+            "name": "Books-A-Million",
+            "url": "https://www.anrdoezrs.net/click-7990613-35140?url=https%3A%2F%2Fwww.booksamillion.com%2Fp%2FCalamity-Club%2FKathryn-Stockett%2F9781954118812"
+          },
+          {
+            "name": "Bookshop.org",
+            "url": "https://bookshop.org/a/3546/9781954118812"
+          }
+        ]
+      }
+    ],
+    "corrections": []
+  }
+}
