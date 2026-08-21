@@ -94,8 +94,8 @@ questions, and the dashboard must not chart them as one.
 - One solid analysis beats five sketched ones.
 - Only put Python where it actually pays. If the work is a `GROUP BY`, forcing
   Python through it is architecture dictated by a CV — a flaw, not a signal.
-- Scaffolding is labelled: `raw.ingest_heartbeat`, `mart.hello_world` and the
-  `hello` job exist only to prove the seam works, and are deleted in #5/#6. Do not
+- Scaffolding is labelled and goes as its issue lands: `raw.ingest_heartbeat` and
+  the `hello` job went with #6; `app:ping` and `mart.hello_world` outlive it. Do not
   build on them.
 
 ## Getting started

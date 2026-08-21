@@ -8,6 +8,26 @@ framework:
     #esi: true
     #fragments: true
 
+    http_client:
+        scoped_clients:
+            # The key rides on every request as a query parameter, which is what NYT
+            # takes — so it is set once here rather than at each call site, where a
+            # forgotten one is a 401 in production and nowhere else.
+            nyt.client:
+                base_uri: 'https://api.nytimes.com/svc/books/v3/'
+                query:
+                    api-key: '%env(NYT_KEY)%'
+                # 429 is in the list on purpose: NYT has an undocumented burst cap on
+                # top of its daily quota (db/README.md), so a 429 is usually "too fast",
+                # not "out of budget". Symfony's default strategy honours Retry-After
+                # when the response carries one, and falls back to this backoff when it
+                # does not. NytClient paces requests so this stays the exception.
+                retry_failed:
+                    http_codes: [423, 425, 429, 500, 502, 503, 504]
+                    delay: 5000
+                    multiplier: 3
+                    max_retries: 3
+
 when@test:
     framework:
         test: true

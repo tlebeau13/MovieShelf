@@ -66,19 +66,19 @@ def test_connects_as_the_analytics_role():
 def test_can_read_raw():
     """Read access is the other half of the contract — a denial here is also a bug."""
     with connection() as conn:
-        assert conn.execute(text("SELECT count(*) FROM raw.ingest_heartbeat")).scalar() >= 0
+        assert conn.execute(text("SELECT count(*) FROM raw.nyt_snapshot")).scalar() >= 0
 
 
 def test_cannot_insert_into_raw():
-    assert_denied("INSERT INTO raw.ingest_heartbeat (source) VALUES ('intruder')")
+    assert_denied("INSERT INTO raw.nyt_snapshot (list_name) VALUES ('intruder')")
 
 
 def test_cannot_update_raw():
-    assert_denied("UPDATE raw.ingest_heartbeat SET source = 'intruder'")
+    assert_denied("UPDATE raw.nyt_snapshot SET list_name = 'intruder'")
 
 
 def test_cannot_delete_from_raw():
-    assert_denied("DELETE FROM raw.ingest_heartbeat")
+    assert_denied("DELETE FROM raw.nyt_snapshot")
 
 
 def test_cannot_create_table_in_raw():

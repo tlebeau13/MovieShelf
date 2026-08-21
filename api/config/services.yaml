@@ -6,7 +6,13 @@
 
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
-# parameters:
+parameters:
+    # Seconds NytClient leaves between requests (#6). Above the ~7s spacing that
+    # already drew a 429 from NYT's undocumented burst cap (db/README.md), and
+    # slow enough that a full backfill spends its daily quota over hours rather
+    # than minutes. Overridden to 0 in the test environment, where every response
+    # is a fixture and the only thing pacing would slow down is CI.
+    nyt.min_request_interval: 12.0
 
 services:
     # default configuration for services in *this* file
@@ -21,3 +27,7 @@ services:
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
+
+when@test:
+    parameters:
+        nyt.min_request_interval: 0.0

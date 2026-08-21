@@ -18,7 +18,9 @@ dependencies = [
 ml = ["scikit-learn>=1.5"]
 
 [project.scripts]
-hello = "analytics.jobs.hello:main"
+# Each job gets a console script here, and its crontab line refers to it by that
+# name. Empty since #6 removed the `hello` scaffolding; the real jobs land in
+# #12-#14.
 
 [dependency-groups]
 dev = [

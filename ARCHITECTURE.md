@@ -194,21 +194,28 @@ what makes mapping book subjects onto TMDB's fixed genre list tractable at all.
 
 ## 7. Data model
 
-Only the scaffolding tables exist today (`raw.ingest_heartbeat`,
-`mart.hello_world`). They exist purely to prove the seam works and are deleted in
-#5/#6. Everything below is the target shape.
+`raw.ingestion_run` and `raw.nyt_snapshot` exist as built (#29, #6). The
+scaffolding they replaced — `raw.ingest_heartbeat`, `mart.hello_world` — is gone.
+Everything else below is still the target shape.
 
 ### RAW — written by Symfony
 
 **`raw.ingestion_run`** — one row per ingestion attempt, shared by every source (#29)
-`id`, `source`, `target` (the list / window / query fetched), `started_at`,
-`finished_at`, `status`, `requests_made`, `cursor`, `error`
+`id`, `source`, `status`, `started_at`, `finished_at`, `rows_written`,
+`window_start`, `window_end`, `error_class`, `error`, `details` (JSONB)
 
 The run record is the source-agnostic spine. Every snapshot row below carries a
 `run_id` back to it, so "what did this crawl cover, how far did it get, can it
 resume" is answered the same way for NYT, TMDB, or a source added years later.
-`cursor` is what makes the budget-aware backfill (§6) resumable — it records where
-a multi-day job stopped when the daily quota ran out.
+
+Two columns landed differently from the sketch this section first carried, and the
+difference matters. `target` became `window_start`/`window_end`, a typed slice of
+source history rather than a free string, which a partial unique index then uses to
+refuse two live attempts at the same window. And there is no `cursor` column: #6's
+backfill resumes off the weeks already in `raw.nyt_snapshot`, because a cursor
+would be a second source of truth and the first crash between the two would make
+them disagree. Per-source counters that are not worth a column — requests made,
+429s absorbed, the week to resume from — live in `details`.
 
 **`raw.nyt_snapshot`** — one row per book per list per week
 `id`, `run_id`, `list_name`, `rank`, `rank_last_week`, `isbn13`, `title`,
@@ -223,6 +230,9 @@ a multi-day job stopped when the daily quota ran out.
 - `list_name` scopes the row to one of NYT's ~dozen weekly lists. Phase 1 ingests
   **Hardcover Fiction** only; widening to more lists is more rows under the same
   schema, not a migration.
+- Unique on (`list_name`, `published_date`, `isbn13`), upserted on conflict: that
+  is what makes a re-crawled week update its rows instead of duplicating them.
+  Keyed on the ISBN rather than the rank because NYT ties ranks.
 
 **`raw.tmdb_snapshot`**
 `id`, `run_id`, `tmdb_id`, `media_type`, `title`, `popularity`, `vote_average`, `vote_count`, `rank`, `snapshot_date`

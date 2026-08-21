@@ -56,5 +56,7 @@ runs on the host.
 **Dependencies:** each component pins its own (`composer.lock`, `uv.lock`,
 `yarn.lock`). Adding one is a decision worth raising, not a detail.
 
-**Scaffolding is labelled.** `raw.ingest_heartbeat` and the `hello` job exist
-only to prove the seam works; they get deleted in #5/#6. Don't build on them.
+**Scaffolding is labelled.** It exists only to prove a seam works and is deleted
+by the issue that makes it redundant — `raw.ingest_heartbeat` and the `hello` job
+went with #6. `app:ping` and its handler are what is left; #5 takes them. Don't
+build on them.
