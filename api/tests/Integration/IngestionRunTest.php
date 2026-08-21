@@ -105,6 +105,29 @@ final class IngestionRunTest extends KernelTestCase
         self::assertSame('TMDB said 503', $row['error']);
     }
 
+    public function testTheApiKeyNeverReachesTheRow(): void
+    {
+        // HttpClient puts the whole URL in its exception message, and the ingestion
+        // key rides in the query string — so the failure most worth recording is the
+        // one carrying the secret. Observed for real on #6's backfill: a 400 from NYT
+        // stored the key in this column, where `analytics` can read it and
+        // `app:ingestion:runs` prints it.
+        $leak = new \RuntimeException(
+            'HTTP/2 400 returned for "https://api.nytimes.com/svc/books/v3/lists/2025-09-21/hardcover-fiction.json?api-key=s3cr3tvalue".'
+        );
+
+        $run = $this->recorder->start(IngestionSource::Nyt);
+        $this->recorder->fail($run, $leak);
+
+        $stored = (string) $this->rowFor($run)['error'];
+
+        self::assertStringNotContainsString('s3cr3tvalue', $stored);
+        self::assertStringContainsString('api-key=[redacted]', $stored);
+        // Redacting must not cost the part that identifies the failure.
+        self::assertStringContainsString('400', $stored);
+        self::assertStringContainsString('2025-09-21', $stored);
+    }
+
     public function testTheRunningRowIsWrittenBeforeTheWorkStarts(): void
     {
         // What makes a killed worker visible afterwards: without this, a crash
