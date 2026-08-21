@@ -15,15 +15,21 @@ when@dev:
                 type: stream
                 path: php://stderr
                 level: info
-                channels: ["!event", "!doctrine"]
+                channels: ["!event", "!doctrine", "!http_client"]
             # The full DEBUG trail, on disk instead of on screen: api/ is
             # bind-mounted, so this is `tail -f api/var/log/dev.log` on the host when
             # a request needs taking apart.
+            #
+            # `http_client` is excluded because it logs each request as its full URL,
+            # and the ingestion keys ride in the query string (#6, #27) — a debug log
+            # is not somewhere a secret should accumulate, and this handler keeps
+            # every line forever. What the ingestion services log about their own
+            # requests (`app` channel: list, week, row counts) is unaffected.
             file:
                 type: stream
                 path: "%kernel.logs_dir%/%kernel.environment%.log"
                 level: debug
-                channels: ["!event"]
+                channels: ["!event", "!http_client"]
 
 when@test:
     monolog:
@@ -50,7 +56,9 @@ when@prod:
                 action_level: error
                 handler: nested
                 excluded_http_codes: [404, 405]
-                channels: ["!deprecation"]
+                # Same reason as dev's file handler: http_client logs full URLs, keys
+                # included, and prod flushes its whole buffer to stderr on any failure.
+                channels: ["!deprecation", "!http_client"]
                 buffer_size: 50 # How many messages should be saved? Prevent memory leaks
             # JSON to stderr: Docker collects it, and a log shipper can parse it.
             nested:

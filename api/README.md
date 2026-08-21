@@ -133,6 +133,14 @@ Terminal states are written over DBAL rather than the EntityManager on purpose: 
 handler that throws mid-flush leaves the EntityManager closed, and a closed
 EntityManager cannot persist the row that records why.
 
+**Error messages are redacted before they are stored.** HttpClient puts the whole
+request URL in its exception message and the ingestion keys ride in the query string,
+so the failure most worth recording is the one carrying the secret.
+`IngestionRunRecorder::redact()` strips `api-key`, `token` and friends on the way into
+the row, because everything downstream (a CLI table, a future dashboard, a pasted bug
+report) would otherwise each have to remember to. The `http_client` channel is off the
+log handlers for the same reason.
+
 `start()` throws `IngestionAlreadyRunning` when another attempt at the same window is
 in flight — the database enforces that, not the caller (see `db/README.md`). Skip on
 it; do not retry, since the conflict will still be there. If it fires and nothing is

@@ -28,6 +28,17 @@ class IngestionRunRecorder
     /** What an abandoned run is recorded as, so orphans are countable like any other failure. */
     public const ABANDONED = 'AbandonedRun';
 
+    /**
+     * Query parameters whose value never gets written down.
+     *
+     * Ingestion keys ride in the query string (NYT's `api-key`, and TMDB's in #5),
+     * and HttpClient puts the full URL in its exception message — so the failure
+     * that is most worth recording is exactly the one carrying the secret. The row
+     * outlives the incident, `analytics` can read it, and `app:ingestion:runs`
+     * prints it to whatever terminal asks.
+     */
+    private const SECRET_QUERY_PARAMS = ['api-key', 'api_key', 'apikey', 'key', 'token', 'access_token'];
+
     public function __construct(
         private EntityManagerInterface $entityManager,
         private Connection $connection,
@@ -116,7 +127,7 @@ class IngestionRunRecorder
         $run->fail(
             $this->clock->now(),
             $error::class,
-            mb_substr($error->getMessage(), 0, self::ERROR_MAX_LENGTH),
+            mb_substr(self::redact($error->getMessage()), 0, self::ERROR_MAX_LENGTH),
             $partial?->rowsWritten ?? 0,
             $partial?->details ?? [],
         );
@@ -165,6 +176,23 @@ class IngestionRunRecorder
         }
 
         return $abandoned;
+    }
+
+    /**
+     * Strips secrets out of a message before it is stored or logged.
+     *
+     * Redacting on the way in rather than on the way out: the value has to be
+     * unrecoverable from the row itself, because everything that reads the row
+     * afterwards — a CLI table, a future dashboard, a support paste — would each
+     * have to remember to redact, and one of them would not.
+     */
+    public static function redact(string $message): string
+    {
+        return (string) preg_replace(
+            \sprintf('/([?&](?:%s)=)[^&"\s]+/i', implode('|', array_map(preg_quote(...), self::SECRET_QUERY_PARAMS))),
+            '${1}[redacted]',
+            $message,
+        );
     }
 
     /**
