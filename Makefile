@@ -119,6 +119,12 @@ messenger-failed: ## List messages parked in the failure transport
 messenger-retry: ## Retry failed messages by hand (all, or one: make messenger-retry CMD=42)
 	$(COMPOSE) exec php bin/console messenger:failed:retry $(CMD)
 
+# ── api/ ingestion (#29) ─────────────────────────────────────────────────────
+
+.PHONY: ingestion-runs
+ingestion-runs: ## Did last night's ingestion work? (make ingestion-runs CMD="--source=nyt")
+	$(COMPOSE) exec php bin/console app:ingestion:runs $(CMD)
+
 # ── analytics/ (Python) ──────────────────────────────────────────────────────
 
 .PHONY: analytics-shell

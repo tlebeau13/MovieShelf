@@ -103,6 +103,48 @@ make api-console CMD="app:ping --note=hi"   # dispatch a test message
 make messenger-failed   # what died
 ```
 
+## Ingestion runs (#29)
+
+Every ingestion service records what it did in `raw.ingestion_run` — one shared
+shape for #5/#6/#7, documented in `db/README.md`. Go through the recorder rather
+than writing the table:
+
+```php
+$this->runs->record(
+    IngestionSource::Nyt,
+    function (IngestionRun $run): IngestionResult {
+        // ... fetch, write to raw.nyt_snapshot ...
+        return new IngestionResult($rowsWritten, ['requests' => $calls]);
+    },
+    windowStart: $week,
+    windowEnd: $week,
+);
+```
+
+The closure returns an `IngestionResult`, not an int, so a job cannot report its page
+count as its row count and have it typecheck.
+
+`record()` writes the `running` row before the work starts, marks it `success` or
+`failed` afterwards, and **re-throws** — recording a failure must not swallow it, or
+Messenger's retry policy never fires. Use `start()` + `succeed()`/`fail()` directly
+when a job needs to report progress mid-run.
+
+Terminal states are written over DBAL rather than the EntityManager on purpose: a
+handler that throws mid-flush leaves the EntityManager closed, and a closed
+EntityManager cannot persist the row that records why.
+
+`start()` throws `IngestionAlreadyRunning` when another attempt at the same window is
+in flight — the database enforces that, not the caller (see `db/README.md`). Skip on
+it; do not retry, since the conflict will still be there. If it fires and nothing is
+actually running, a dead worker's row is holding the window: `--abandon-stale`.
+
+```bash
+make ingestion-runs                      # last 20 attempts; exits non-zero if the
+                                         # latest attempt for a source failed or is stale
+make ingestion-runs CMD="--source=tmdb --limit=5"
+make ingestion-runs CMD="--abandon-stale"    # release windows held by dead workers
+```
+
 ## Logging
 
 Monolog, configured for containers rather than for a log directory

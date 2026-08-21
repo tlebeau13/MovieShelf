@@ -21,9 +21,11 @@ framework:
                 dsn: 'doctrine://default?auto_setup=0&table_name=messenger.messenger_messages&queue_name=failed'
 
         routing:
-            # Scaffolding (#8): proves a dispatched message reaches the worker.
-            # Deleted in #5 when the first real ingestion message lands.
-            App\Message\Ping: async
+            # Routed by interface, not by class: a new source's message goes async by
+            # implementing App\Message\IngestionMessage, so nothing has to be added
+            # here for #5/#6/#7 (#29). A forgotten routing line is a message that
+            # runs synchronously in the web request without anyone noticing.
+            App\Message\IngestionMessage: async
 
 when@test:
     framework:
