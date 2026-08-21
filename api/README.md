@@ -64,8 +64,66 @@ same set CI runs. Coding standards are the `@Symfony` ruleset
 (`.php-cs-fixer.dist.php`); the tool is a dev dependency, so it exists in the dev
 image only.
 
+## Async workers (Messenger)
+
+Ingestion runs off the web request, as Messenger messages a separate `worker`
+container consumes. The pattern is established here (#8) so the ingestion services
+(#5–#7) are written as handlers once, not inline and then converted.
+
+- **Transport: Doctrine, not Redis.** Postgres already runs and the pipeline is
+  batch, so a queue in a second datastore would buy nothing. The queue tables live
+  in their own **`messenger` schema** owned by `symfony` — a work queue is tool
+  state, so it stays out of `canonical`, the same call the `migrations` schema
+  makes.
+- **Setup.** The transport runs `auto_setup=0` (no DDL at dispatch time); the
+  tables are created by `messenger:setup-transports`, which the container
+  entrypoint runs at boot after migrations. `make messenger-setup` runs it by hand.
+- **Cadence.** The Scheduler (`src/Schedule.php`) dispatches messages; the worker
+  just consumes `async` and `scheduler_default`. Cadence stays declarative in one
+  place, the worker stays a dumb consumer.
+- **Failure.** `async` retries 3× with exponential backoff; a message still failing
+  lands in the `failed` transport instead of vanishing. Inspect with
+  `make messenger-failed`, retry by hand with `make messenger-retry` (all, or
+  `CMD=<id>` for one).
+- **Logs.** `make worker-logs` prints a line per message — received, handled
+  successfully, each retry, and the hand-off to the failure transport — with the
+  channel in front (`messenger.INFO`, `app.INFO`). Levels come from Monolog, not
+  from console verbosity, so the consumer takes no `-v` flags.
+- **The worker recycles itself** on a time/memory limit and `restart:
+  unless-stopped` brings it back — the supported way to run a long-lived worker.
+  SIGTERM stops it between messages, so an in-flight handler finishes first.
+
+Prove the seam without any real ingestion: `bin/console app:ping` dispatches a
+scaffolding message; `--fail` drives the retry + failure path. Both `app:ping` and
+its handler are labelled scaffolding and are deleted in #5.
+
+```bash
+make worker-logs        # follow the consumer
+make api-console CMD="app:ping --note=hi"   # dispatch a test message
+make messenger-failed   # what died
+```
+
+## Logging
+
+Monolog, configured for containers rather than for a log directory
+(`config/packages/monolog.yaml`).
+
+- **dev** writes two ways: INFO and up to `stderr`, which is what `make up` and
+  `make worker-logs` show, and the full DEBUG trail to `var/log/dev.log`. The
+  `event` and `doctrine` channels are off the `stderr` handler — every listener
+  notification and every SQL query, otherwise ~18 lines per request. They stay in
+  the file, so `tail -f api/var/log/dev.log` still has them when a request needs
+  taking apart.
+- **prod** buffers: nothing is written until something fails, then `fingers_crossed`
+  flushes the whole DEBUG trail that led there, as JSON on `stderr` for Docker to
+  collect. Deprecations get their own channel and bypass the buffer.
+
+Caddy's access log is `wrap console` with the header, TLS and response-header dumps
+filtered out (`frankenphp/Caddyfile`), so a request is one readable line instead of
+~700 characters of JSON.
+
 ## Stack
-Symfony 8.1, PHP 8.5, Doctrine ORM 3, Messenger, Scheduler. HTTP Client arrives
+Symfony 8.1, PHP 8.5, Doctrine ORM 3, Messenger, Scheduler, Monolog. HTTP Client arrives
 with the ingestion services (#5–#7) — it is not a dependency yet.
 Served by **FrankenPHP** (single container, built on Caddy — no separate nginx +
 php-fpm). Automatic HTTPS on deploy; worker mode available as a later perf step.

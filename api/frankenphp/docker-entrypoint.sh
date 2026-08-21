@@ -36,6 +36,11 @@ if [ "$1" = 'frankenphp' ] || [ "$1" = 'php' ] || [ "$1" = 'bin/console' ]; then
 		if find ./migrations -iname '*.php' -print -quit | grep --quiet .; then
 			php bin/console doctrine:migrations:migrate --no-interaction --all-or-nothing
 		fi
+
+		# Create the Messenger queue tables. The transport runs auto_setup=0, so
+		# nothing creates them at dispatch time; this does it once at boot instead.
+		# Idempotent, and the `messenger` schema it targets is made by db/init.
+		php bin/console messenger:setup-transports --no-interaction
 	fi
 
 	echo 'PHP app ready!'

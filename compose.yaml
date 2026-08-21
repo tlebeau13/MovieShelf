@@ -6,7 +6,7 @@ services:
       context: ./api
     image: ${IMAGES_PREFIX:-}movieshelf-php
     restart: unless-stopped
-    environment:
+    environment: &php-env
       SERVER_NAME: ${SERVER_NAME:-localhost}, php:80
       DEFAULT_URI: https://${SERVER_NAME:-localhost}:${HTTPS_PORT:-443}
       # Committed api/.env leaves this empty, so without injecting it here the
@@ -49,6 +49,26 @@ services:
         target: 443
         published: ${HTTP3_PORT:-443}
         protocol: udp
+    depends_on:
+      db: { condition: service_healthy }
+
+  # Consumes the async queue and the scheduler. Same image and env as php (so it
+  # connects as the `symfony` role and inherits the ingestion keys), but runs the
+  # consumer instead of the web server. --time-limit + --memory-limit make it
+  # recycle itself; `restart` brings it back, which is the supported way to run a
+  # long-lived worker. SIGTERM stops it *between* messages, so stop_grace_period
+  # lets an in-flight handler finish before Docker escalates to SIGKILL.
+  #
+  # No -v flags: what makes a line per message show up in `make worker-logs` is
+  # Monolog's stderr handler (config/packages/monolog.yaml), not console verbosity.
+  worker:
+    build:
+      context: ./api
+    image: ${IMAGES_PREFIX:-}movieshelf-php
+    restart: unless-stopped
+    environment: *php-env
+    command: ["bin/console", "messenger:consume", "async", "scheduler_default", "--time-limit=3600", "--memory-limit=128M"]
+    stop_grace_period: 30s
     depends_on:
       db: { condition: service_healthy }
 

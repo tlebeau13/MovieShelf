@@ -14,6 +14,12 @@ CREATE SCHEMA mart      AUTHORIZATION analytics;  -- Python writes analytics tab
 -- tool state. See api/config/packages/doctrine_migrations.yaml.
 CREATE SCHEMA migrations AUTHORIZATION symfony;
 
+-- Same reasoning for Messenger's transport tables: a work queue is tool state,
+-- not a domain layer, so it gets its own schema instead of landing in `canonical`
+-- via search_path. Owned by symfony (the only role that runs the workers).
+-- See api/config/packages/messenger.yaml.
+CREATE SCHEMA messenger AUTHORIZATION symfony;
+
 -- ── Cross-layer READ access (USAGE lets a role "see into" a schema) ───────────
 GRANT USAGE ON SCHEMA raw, canonical TO analytics; -- Python reads Symfony's layers
 GRANT USAGE ON SCHEMA mart           TO symfony;   -- Symfony reads Python's marts
