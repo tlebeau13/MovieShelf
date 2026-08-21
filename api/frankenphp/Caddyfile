@@ -13,11 +13,25 @@
 {$SERVER_NAME:localhost} {
 	log {
 		{$CADDY_SERVER_LOG_OPTIONS}
-		# Redact the authorization query parameter that can be set by Mercure
+		# `wrap console` swaps the one-line-of-JSON access log for Caddy's human
+		# format — colourised level, short message, fields at the end — which is
+		# what `make up` is actually read in. The filter around it still redacts
+		# the authorization query parameter that can be set by Mercure.
 		format filter {
+			wrap console
 			request>uri query {
 				replace authorization REDACTED
 			}
+			# Everything below is noise in a terminal: full header dumps, the TLS
+			# handshake details and the response header map turn one request into
+			# ~400 characters. Deleted from the log line, not from the response.
+			request>headers delete
+			request>remote_port delete
+			request>client_ip delete
+			request>tls delete
+			resp_headers delete
+			bytes_read delete
+			user_id delete
 		}
 	}
 

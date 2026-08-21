@@ -26,8 +26,8 @@ help: ## Show this help
 # ── Stack ────────────────────────────────────────────────────────────────────
 
 .PHONY: up
-up: ## Start every service in the background
-	$(COMPOSE) up -d
+up: ## Start every service
+	$(COMPOSE) up
 
 .PHONY: down
 down: ## Stop every service (volumes and data survive)
@@ -100,6 +100,24 @@ api-lint: ## Report coding-standard violations without touching files
 .PHONY: api-fix
 api-fix: ## Rewrite files to satisfy PHP-CS-Fixer
 	$(COMPOSE) exec php vendor/bin/php-cs-fixer fix
+
+# ── api/ workers (Messenger) ─────────────────────────────────────────────────
+
+.PHONY: worker-logs
+worker-logs: ## Follow the async worker's logs
+	$(COMPOSE) logs -f worker
+
+.PHONY: messenger-setup
+messenger-setup: ## Create the Messenger queue tables (idempotent; also run at boot)
+	$(COMPOSE) exec php bin/console messenger:setup-transports
+
+.PHONY: messenger-failed
+messenger-failed: ## List messages parked in the failure transport
+	$(COMPOSE) exec php bin/console messenger:failed:show
+
+.PHONY: messenger-retry
+messenger-retry: ## Retry failed messages by hand (all, or one: make messenger-retry CMD=42)
+	$(COMPOSE) exec php bin/console messenger:failed:retry $(CMD)
 
 # ── analytics/ (Python) ──────────────────────────────────────────────────────
 

@@ -1,22 +1,32 @@
 framework:
     messenger:
-        # Uncomment this (and the failed transport below) to send failed messages to this transport for later handling.
-        # failure_transport: failed
+        # A dead message goes here instead of vanishing, so it can be inspected
+        # and retried by hand (`make messenger-retry`).
+        failure_transport: failed
 
         transports:
-            # https://symfony.com/doc/current/messenger.html#transport-configuration
-            # async: '%env(MESSENGER_TRANSPORT_DSN)%'
-            # failed: 'doctrine://default?queue_name=failed'
-            sync: 'sync://'
+            # Doctrine, not Redis: Postgres already runs and the pipeline is batch,
+            # so a second datastore would buy nothing. auto_setup=0 keeps the
+            # transport from issuing DDL at runtime — the table is created by a
+            # migration instead. Schema-qualified into `messenger` so the queue
+            # table stays out of `canonical`, the same call the `migrations` schema
+            # makes (see db/init/02-schemas.sql).
+            async:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                retry_strategy:
+                    max_retries: 3
+                    delay: 1000
+                    multiplier: 2
+            failed:
+                dsn: 'doctrine://default?auto_setup=0&table_name=messenger.messenger_messages&queue_name=failed'
 
         routing:
-            # Route your messages to the transports
-            # 'App\Message\YourMessage': async
+            # Scaffolding (#8): proves a dispatched message reaches the worker.
+            # Deleted in #5 when the first real ingestion message lands.
+            App\Message\Ping: async
 
-# when@test:
-#    framework:
-#        messenger:
-#            transports:
-#                # replace with your transport name here (e.g., my_transport: 'in-memory://')
-#                # For more Messenger testing tools, see https://github.com/zenstruck/messenger-test
-#                async: 'in-memory://'
+when@test:
+    framework:
+        messenger:
+            transports:
+                async: 'in-memory://'

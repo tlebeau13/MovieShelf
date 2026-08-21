@@ -31,6 +31,20 @@ services:
 ###> symfony/mercure-bundle ###
 ###< symfony/mercure-bundle ###
 
+  # Dev worker runs the bind-mounted code as your user, like php above — but no
+  # Caddyfile/php-ini mounts, since it is not the web server.
+  worker:
+    user: "${UID:-1000}:${GID:-1000}"
+    image: ${IMAGES_PREFIX:-}movieshelf-php-dev
+    build:
+      target: frankenphp_dev
+    volumes:
+      - ./api:/app
+    environment:
+      APP_ENV: "${APP_ENV:-dev}"
+    # Same reason as php: a TTY is what makes the console output colourised.
+    tty: true
+
   analytics:
     # Separate tag so the dev image doesn't clobber the prod one in the local cache.
     image: ${IMAGES_PREFIX:-}movieshelf-analytics-dev
