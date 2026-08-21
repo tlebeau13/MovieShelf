@@ -119,21 +119,23 @@ messenger-failed: ## List messages parked in the failure transport
 messenger-retry: ## Retry failed messages by hand (all, or one: make messenger-retry CMD=42)
 	$(COMPOSE) exec php bin/console messenger:failed:retry $(CMD)
 
-# ── api/ ingestion (#29) ─────────────────────────────────────────────────────
+# ── api/ ingestion (#29, #6) ─────────────────────────────────────────────────
 
 .PHONY: ingestion-runs
 ingestion-runs: ## Did last night's ingestion work? (make ingestion-runs CMD="--source=nyt")
 	$(COMPOSE) exec php bin/console app:ingestion:runs $(CMD)
+
+.PHONY: nyt-backfill
+nyt-backfill: ## Seed past NYT weeks; resumable (make nyt-backfill CMD="--dry-run")
+	# Spends real quota: one request per missing week, 1,000/day (db/README.md).
+	# --dry-run first says how many that would be. Re-run the same line to resume.
+	$(COMPOSE) exec php bin/console app:ingestion:nyt:backfill $(CMD)
 
 # ── analytics/ (Python) ──────────────────────────────────────────────────────
 
 .PHONY: analytics-shell
 analytics-shell: ## Open a shell in the analytics container
 	$(COMPOSE) exec analytics bash
-
-.PHONY: analytics-run
-analytics-run: ## Run the hello job now, without waiting for cron
-	$(COMPOSE) exec analytics hello
 
 .PHONY: analytics-test
 analytics-test: ## Run pytest in the container (needs the live DB)

@@ -40,7 +40,7 @@ skips the tick if a previous run is still going.
 
 ```bash
 docker compose up -d analytics       # starts the scheduler
-docker compose exec analytics hello  # run a job now, without waiting for cron
+docker compose exec analytics <job>   # run a job now, without waiting for cron
 docker compose logs -f analytics     # watch scheduled runs
 docker compose exec analytics python -m pytest   # permission tests
 docker compose exec analytics ruff check .
@@ -56,7 +56,19 @@ The `DATABASE_URL` is injected by `compose.yaml` and connects as the restricted
 enforcing that boundary; PostgreSQL grants do (see `db/init/02-schemas.sql`), and
 `tests/test_permissions.py` asserts it.
 
-## Scaffolding to remove later
-`raw.ingest_heartbeat` (created by a migration in `api/`) and the `hello` job
-exist only so #3 could prove the seam end to end. The ingestion issues (#5, #6)
-should drop the table, and the real jobs land in #12–#14.
+## No jobs yet
+
+The `hello` scaffolding and `raw.ingest_heartbeat` are gone as of #6, which
+replaced them with a real RAW table (`raw.nyt_snapshot`) for the permission tests
+to read. `crontab` is therefore empty until the first real job lands in #12–#14 —
+supercronic keeps running with nothing scheduled, so the container stays up.
+
+One leftover the code cannot clean up: `mart.hello_world`, created at runtime by
+the job that no longer exists. `mart` is owned by the `analytics` role, so no
+Symfony migration may drop it. On an existing database, drop it by hand:
+
+```bash
+make psql-analytics   # then: DROP TABLE IF EXISTS mart.hello_world;
+```
+
+or simply `make db-reset`, which rebuilds the volume from `db/init`.

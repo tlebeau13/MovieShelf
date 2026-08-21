@@ -42,11 +42,13 @@ Split by what is under test, so the bulk of ingestion needs no secret:
   `tests/Fixtures/<provider>/`. These are the majority and always run.
 - **Live provider calls** — one thin test per source, asserting the response still
   has the shape the parser expects — use the `RequiresApiKey` trait and skip when
-  the key is unset.
+  the key is unset. **NYT (#6) has none**: the suite is fixture-only, so no test
+  run can spend the daily quota, even on a machine that has a key. What that gives
+  up is drift detection — NYT's `/lists/names.json` already 404s with a valid key,
+  and only a real call finds that kind of change.
 
-CI copies `.env.example`, so the keys are empty and the live tests skip. A fork
-with no secrets passes. The live tests are what catch upstream drift: NYT's
-`/lists/names.json` already 404s with a valid key, and only a real call finds that.
+CI copies `.env.example`, so the keys are empty and any live test skips. A fork
+with no secrets passes.
 
 Trim recorded fixtures before committing — a full `lists/overview.json` response
 is ~390 KB.
@@ -135,11 +137,11 @@ EntityManager cannot persist the row that records why.
 
 **Error messages are redacted before they are stored.** HttpClient puts the whole
 request URL in its exception message and the ingestion keys ride in the query string,
-so the failure most worth recording is the one carrying the secret.
-`IngestionRunRecorder::redact()` strips `api-key`, `token` and friends on the way into
-the row, because everything downstream (a CLI table, a future dashboard, a pasted bug
-report) would otherwise each have to remember to. The `http_client` channel is off the
-log handlers for the same reason.
+so the failure most worth recording is the one carrying the secret — it happened on
+#6's first backfill. `IngestionRunRecorder::redact()` strips `api-key`, `token` and
+friends on the way into the row, because everything downstream (a CLI table, a
+future dashboard, a pasted bug report) would otherwise each have to remember to.
+The `http_client` channel is off the log handlers for the same reason.
 
 `start()` throws `IngestionAlreadyRunning` when another attempt at the same window is
 in flight — the database enforces that, not the caller (see `db/README.md`). Skip on
@@ -152,6 +154,66 @@ make ingestion-runs                      # last 20 attempts; exits non-zero if t
 make ingestion-runs CMD="--source=tmdb --limit=5"
 make ingestion-runs CMD="--abandon-stale"    # release windows held by dead workers
 ```
+
+## NYT ingestion (#6)
+
+The first real source. One list-week is one request, one `ingestion_run`, and up to
+15 rows in `raw.nyt_snapshot`.
+
+```bash
+make nyt-backfill CMD="--dry-run"                 # how many weeks are missing
+make nyt-backfill                                 # 2025-01-01 → today, resumable
+make nyt-backfill CMD="--from=2024-01-01 --budget=400 --list=hardcover-fiction"
+make ingestion-runs CMD="--source=nyt"            # what the crawls did
+```
+
+- **Weekly, anchored to a Thursday morning in New York** (`src/Schedule.php`). NYT dates a list to a
+  Sunday but publishes it days earlier, so a Thursday tick picks up the list dated
+  the coming Sunday. Repeating a fetch is free — see idempotency below — so the
+  cadence is picked to never miss rather than to never repeat.
+- **`published_date` is the key, not the fetch clock.** The API snaps a requested
+  date to the list actually published that week, and rows are filed under what came
+  back. That is what makes two crawls of one week collapse onto the same rows
+  (`uniq_nyt_snapshot_entry`, upserted on conflict).
+- **The backfill is resumable because the table is the progress record.** It asks
+  which weeks it already has, fetches the rest oldest-first, and stops when
+  `--budget` requests are spent — re-running the identical command continues.
+  Defaults to a year of history (#28's decision, one list ≈ 52 requests against a
+  1,000/day quota).
+- **Pacing is in `NytClient`, retries are on the scoped client.** NYT has an
+  undocumented burst cap on top of the daily quota (`db/README.md`), so requests are
+  spaced `%nyt.min_request_interval%` seconds apart and 429 is in the retry list.
+
+### Looking at what landed (dev only)
+
+Four read-only JSON endpoints over `raw.nyt_snapshot`, so the crawl can be eyeballed
+without opening psql:
+
+```bash
+curl -sk https://localhost/api/nyt/coverage                  # weeks, books, rows, gaps, last runs
+curl -sk https://localhost/api/nyt/weeks                     # every stored week + book count
+curl -sk https://localhost/api/nyt/weeks/2026-08-16          # that week's list, in rank order
+curl -sk https://localhost/api/nyt/books/9780593798430       # one book's whole trajectory
+```
+
+All take `?list=` and default to `hardcover-fiction`. `coverage.missing_weeks` is the
+one to read first: a gap inside the stored range is what would make a rank chart draw
+a straight line through a week nobody crawled.
+
+They are **dev only** — the controller 404s when `kernel.debug` is false. Nothing in
+this app authenticates yet, and these serve RAW, unaggregated. The public API is #16
+and serves MART.
+
+### The suite never calls NYT
+
+Every response in the tests is the recorded fixture replayed through
+`MockHttpClient` (`tests/Integration/NytIngestionTest.php`), so `make api-test`
+spends no quota and needs no key, with or without one in the environment.
+
+The trade-off is deliberate and worth stating: nothing in CI notices when NYT
+changes its response shape. `NytResponseException` is what turns that into a loud
+failure at runtime instead of a week of silently empty lists, and
+`make ingestion-runs --source=nyt` is where it surfaces.
 
 ## Logging
 
@@ -173,7 +235,7 @@ filtered out (`frankenphp/Caddyfile`), so a request is one readable line instead
 ~700 characters of JSON.
 
 ## Stack
-Symfony 8.1, PHP 8.5, Doctrine ORM 3, Messenger, Scheduler, Monolog. HTTP Client arrives
-with the ingestion services (#5–#7) — it is not a dependency yet.
+Symfony 8.1, PHP 8.5, Doctrine ORM 3, Messenger, Scheduler, Monolog, HTTP Client
+(the one dependency #6 added).
 Served by **FrankenPHP** (single container, built on Caddy — no separate nginx +
 php-fpm). Automatic HTTPS on deploy; worker mode available as a later perf step.

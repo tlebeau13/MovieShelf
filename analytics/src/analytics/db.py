@@ -51,8 +51,9 @@ def connection() -> Iterator[Connection]:
 
 # Arbitrary but fixed: advisory lock keys are a global namespace per database,
 # so every job that must not overlap picks its own constant here.
-LOCK_KEYS = {
-    "hello": 4_100_001,
+LOCK_KEYS: dict[str, int] = {
+    # The `hello` scaffolding held 4_100_001 until #6 deleted it; the real jobs
+    # claim their own keys here as they land (#12-#14).
 }
 
 

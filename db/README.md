@@ -152,7 +152,19 @@ confirmed with live calls, not docs.
 Both serve history retroactively, so backfill is a direct dated crawl, not a
 forward-only feed.
 
-### NYT `raw.nyt_snapshot` — field notes for #6
+### NYT `raw.nyt_snapshot` — as built (#6)
+
+```
+id, run_id → raw.ingestion_run(id), list_name, rank, rank_last_week,
+isbn13, title, author, weeks_on_list, published_date
+```
+
+Unique on (`list_name`, `published_date`, `isbn13`) and written with
+`ON CONFLICT DO UPDATE`, so crawling a week twice updates its rows rather than
+duplicating them — the property the weekly job and the backfill both lean on.
+Indexed on (`isbn13`, `published_date`) for the rank-over-time reads in #12/#17.
+
+The field notes that shaped it:
 
 Verified against a live `hardcover-fiction` response (dump: one per endpoint kept
 out of git; regenerate with a key). Per-book fields that matter:
@@ -167,12 +179,18 @@ out of git; regenerate with a key). Per-book fields that matter:
   (when NYT published the list, always a Sunday). `published_date` is the list key.
 - **`price` is `"0.00"`** across the board — NYT no longer publishes it. Dead field.
 
-### NYT rate limits — for #6's crawler
+### NYT rate limits — what the crawler does about them
 
 Documented: 1,000 requests/day. **Undocumented burst cap observed**: sequential
 probes at ~7s spacing drew a `429`. The daily quota already forces a multi-day
 resumable job; the burst cap means it also needs per-request throttling and retry
 on 429, not just a daily counter.
+
+Both are handled, in different places (#6): `NytClient` spaces requests 12s apart
+(`nyt.min_request_interval`), and the scoped client in `api/config/packages/framework.yaml`
+retries 429 with backoff, honouring `Retry-After` when NYT sends one. The backfill's
+`--budget` is the daily counter, defaulting below the quota because a retried
+request spends quota the counter never sees.
 
 ## Contents
 - `init/01-roles.sh` — creates the `symfony` + `analytics` login roles.

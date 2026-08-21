@@ -3,8 +3,6 @@
 # Times are UTC (the container has no TZ set). supercronic logs each run to
 # stdout, so `docker compose logs analytics` is the whole story.
 #
-# The real analytics cadences arrive with issues #12-#14. 15 minutes is a
-# scaffold value: frequent enough to see it working, harmless because the job
-# takes an advisory lock and skips if a previous run is still going.
-
-*/15 * * * * hello
+# Empty on purpose since #6: the `hello` scaffolding job is gone, and the real
+# cadences arrive with #12-#14. supercronic keeps running with nothing to do,
+# which is what keeps the container from restart-looping until then.
