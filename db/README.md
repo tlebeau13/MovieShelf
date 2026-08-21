@@ -64,6 +64,81 @@ Two login roles, created by `init/01-roles.sh` from `.env`:
 - **#2 (Doctrine):** map RAW/canonical entities to schema `raw` / `canonical`.
 - **#3 (SQLAlchemy):** target schema `mart` for writes; read `raw`/`canonical`.
 
+## `raw.ingestion_run` — the shared run record (#29)
+
+Every ingestion service (#5 TMDB, #6 NYT, #7 Open Library) writes this one table
+instead of three log formats, so "did last night's ingestion work?" is one query.
+Written through `App\Ingestion\IngestionRunRecorder`, never by hand.
+
+| Column | Type | Meaning |
+|--------|------|---------|
+| `id` | `BIGINT` identity | |
+| `source` | `VARCHAR(32)` | `tmdb` \| `nyt` \| `openlibrary` (`App\Enum\IngestionSource`) |
+| `status` | `VARCHAR(16)` | `running` \| `success` \| `failed` |
+| `started_at` / `finished_at` | `TIMESTAMPTZ` | `finished_at` is null while running |
+| `rows_written` | `INT` | Rows the attempt actually landed in RAW |
+| `window_start` / `window_end` | `DATE`, nullable | The slice of source history covered — a NYT list week, a TMDB release window. Null for sources crawled by key rather than by date |
+| `error_class` | `VARCHAR(255)`, nullable | The exception's class, kept apart from its message so failures are countable by kind — "how many 503s this week" is a `GROUP BY`, not a `LIKE` |
+| `error` | `TEXT`, nullable | The exception's message, truncated to 1000 chars. Never a stack trace |
+| `details` | `JSONB` | Source-specific counters (requests made, 429s absorbed) that are not worth a column each |
+
+**A row is one attempt, not one logical run.** When Messenger retries a failed
+handler (#8), the new attempt gets its own row. Collapsing them would mean either
+losing the failures or rewriting history on retry — and the failure count is the
+only evidence that the retry policy in `messenger.yaml` is set right.
+
+### One live attempt per window
+
+`uniq_ingestion_run_active` is a unique index on `(source, window_start, window_end)`
+**partial on `status = 'running'`**. A queue redelivers — a worker that dies after
+handling but before acking gets the same message again — so two concurrent runs over
+one window is a matter of when, not if, and the caller remembering to check is not a
+guarantee. Partial on `running` because a retry is a *new row* by design: finished
+attempts must be free to pile up on the same window.
+
+Two consequences worth knowing:
+
+- The recorder turns the violation into `IngestionAlreadyRunning`. Skipping is
+  usually the right response; retrying is not, since the conflict will still be
+  there. PostgreSQL aborts the surrounding transaction on the violation, so catch it
+  outside any transaction of your own.
+- **Null windows are exempt.** Every `NULL` is distinct in PostgreSQL, so a source
+  crawled by key rather than by date can still have two attempts in flight.
+  `NULLS NOT DISTINCT` would fix it but Doctrine's mapping cannot express it, and a
+  schema that reads as permanently drifted costs more than it buys. A keyed source
+  that wants the guarantee passes a window — a synthetic day is enough.
+
+### What a failed run means
+
+- **`failed`** — the handler threw. The exception is re-thrown after the row is
+  written, so Messenger still retries; after `max_retries` the message parks in the
+  failure transport (`make messenger-failed`) and the last row stays `failed`.
+- **No `partial`.** A run that wrote 900 of 1000 rows and then threw is `failed`
+  with `rows_written = 900`. A status that needs interpreting is not an answer.
+- **`running` past the job's cadence is a dead worker**, not a slow one: the row is
+  written before the work starts and nothing rolls it back, so a killed container
+  leaves it behind. `app:ingestion:runs` shows those as `stale` (default: older than
+  24h) and exits non-zero. Nothing reaps them automatically — the row *is* the
+  evidence, and it holds the window under the unique index until someone says the run
+  is over: `make ingestion-runs CMD="--abandon-stale"` marks them failed with
+  `error_class = AbandonedRun`, keeping the trace while releasing the window.
+- **The scheduler does not read this table.** Cadence stays declarative in
+  `api/src/Schedule.php` (#8); a run that failed is retried by Messenger, not
+  rescheduled. Backfill gaps are a query over `window_start`/`window_end`, which is
+  #6's problem, not the scheduler's.
+
+A new source costs one `IngestionSource` case plus its own RAW table: `source` is a
+`VARCHAR`, not a PostgreSQL enum, so no migration; the command and the repository
+walk `IngestionSource::cases()`; and its message routes itself to the worker by
+implementing `App\Message\IngestionMessage` (`messenger.yaml` routes the interface,
+not the class).
+
+```bash
+make ingestion-runs                          # last 20 attempts, all sources
+make ingestion-runs CMD="--source=nyt"       # one source; verdict scoped to it
+make ingestion-runs CMD="--abandon-stale"    # release windows held by dead workers
+```
+
 ## Source coverage (verified, #28)
 
 The historical range each source actually serves — what #12/#13/#17 chart against,
